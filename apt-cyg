@@ -1221,6 +1221,17 @@ function apt-cyg-packageof ()
   done
 }
 
+function getpackage_from_cache ()
+{
+  for m in $(ls -d $cache/*)
+  do
+      if [ -f "$m/$1" ]; then
+        # check the md5
+        local digactual="$(md5sum $m/$1 | awk '{print $1}')"
+        [ "$2" == "$digactual" ] && echo "$m/$1"
+      fi
+  done
+}
 
 function apt-cyg-install ()
 {
@@ -1258,18 +1269,26 @@ function apt-cyg-install ()
     
     # pick the latest version, which comes first
     local install="$(awk '/^install: / { print $2; exit }' "release/$pkg/desc")"
+
+    # get md5
+    local digest="$(awk '/^install: / { print $4; exit }' "release/$pkg/desc")"
     
     if [ -z "$install" ]; then
       echo "Could not find \"install\" in package description: obsolete package?"
       exit 1
     fi
-    
-    local file="$(basename "$install")"
+
     cd "release/$pkg"
-    "${WGET[@]}" -nc $mirror/$install
-    
+    local file=$(getpackage_from_cache $install $digest)
+
+    if [ ! -z "$file" ]; then
+      echo Package $pkg already in the cache
+    else
+      "${WGET[@]}" -nc $mirror/$install
+    fi
+      
     # check the md5
-    local digest="$(awk '/^install: / { print $4; exit }' "desc")"
+    local file="$(basename "$install")"
     local digactual="$(md5sum $file | awk '{print $1}')"
     if [ "$digest" != "$digactual" ]; then
       echo MD5 sum did not match, exiting
